@@ -26,8 +26,8 @@ parser.add_argument("main_file",
                     help="main file to fit the BGM to")
 parser.add_argument("outfile",
                     help="name of output file")
-parser.add_argument("-b", "--bgm-volume", default="0.01",
-		    help="volume of BGM between 0-1 (default: 0.01)")
+parser.add_argument("-b", "--bgm-volume", default="0.0075",
+		    help="volume of BGM between 0-1 (default: 0.0075)")
 parser.add_argument("-d", "--track-root", default=os.environ["HOME"] + "/media/music",
 		    help="directory of all tracks in given playlist (default: ~/media/music")
 parser.add_argument("-f", "--fade-duration", default=10,
