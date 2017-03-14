@@ -32,8 +32,8 @@ parser.add_argument("-d", "--track-root", default=os.environ["HOME"] + "/media/m
 		    help="directory of all tracks in given playlist (default: ~/media/music")
 parser.add_argument("-f", "--fade-duration", default=10,
 		    help="fade in/out duration for BGM (default: 10)")
-parser.add_argument("-p", "--playlist", default="best",
-		    help="MPD playlist to use (default: best)")
+parser.add_argument("-p", "--playlist", default="bgm",
+		    help="MPD playlist to use (default: bgm)")
 
 # parse arguments
 args = parser.parse_args()
