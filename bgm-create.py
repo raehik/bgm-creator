@@ -9,10 +9,7 @@ import subprocess
 import random
 import argparse
 
-track_root = os.environ["HOME"] + "/media/music"
-playlist = "best"
-
-## Argument parsing {{{
+## Argument parsing (inc. default values) {{{
 """Argparse override to print usage to stderr on argument error."""
 class ArgumentParserUsage(argparse.ArgumentParser):
     def error(self, message):
@@ -27,10 +24,16 @@ parser.add_argument("-v", "--verbose", action="store_true",
                     help="be verbose")
 parser.add_argument("main_file",
                     help="main file to fit the BGM to")
-parser.add_argument("out_with_bgm",
+parser.add_argument("outfile",
                     help="name of output file")
-parser.add_argument("-b", "--bgm-volume", default="0.5",
+parser.add_argument("-b", "--bgm-volume", default="0.01",
 		    help="volume of BGM between 0-1 (default: 0.01)")
+parser.add_argument("-d", "--track-root", default=os.environ["HOME"] + "/media/music",
+		    help="directory of all tracks in given playlist (default: ~/media/music")
+parser.add_argument("-f", "--fade-duration", default=10,
+		    help="fade in/out duration for BGM (default: 10)")
+parser.add_argument("-p", "--playlist", default="best",
+		    help="MPD playlist to use (default: best)")
 
 # parse arguments
 args = parser.parse_args()
@@ -61,7 +64,6 @@ def run_command(args):
     whether the command failed or not."""
     was_successful = True
 
-    # execute using a shell so we can use piping & redirecting
     proc = subprocess.Popen(args, stdout=subprocess.PIPE)
     out, err = proc.communicate()
 
@@ -72,7 +74,7 @@ def run_command(args):
 
 def file_of_track(track):
     """Get a track's filepath."""
-    return "{}/{}".format(track_root, track)
+    return "{}/{}".format(args.track_root, track)
 
 def length_of_file(f):
     """Get the length of an audio file in seconds."""
@@ -81,7 +83,7 @@ def length_of_file(f):
     length, successful = run_command(["ffprobe", "-i", f, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"])
     return float(length)
 
-tracks_str, successful = run_command(["mpc", "playlist", "-f", "%file%", playlist])
+tracks_str, successful = run_command(["mpc", "playlist", "-f", "%file%", args.playlist])
 tracks = tracks_str.splitlines()
 random.shuffle(tracks)
 
@@ -90,26 +92,34 @@ bgm_length = 0
 bgm_files = []
 while main_length > bgm_length:
     track = tracks.pop()
-    log("BGM: {}".format(track))
+    print("BGM: {}".format(track))
     bgm_files.append(file_of_track(track))
     bgm_length += length_of_file(file_of_track(track))
 
-## Form FFmpeg command {{{
+## Form conversion command {{{
 ### Filtergraph {{{
 concat_inputs = "".join(["[{}:0]".format(track_num) for track_num in range(1, len(bgm_files)+1)])
-filter_concat = "{} concat=n={}:v=0:a=1 [bgm]".format(concat_inputs, len(bgm_files))
-filter_amerge_pan = "[bgm][0:0] amerge=inputs=2, pan=stereo|FL<{0}*FL+FC|FR<{0}*FR+FC [merged]".format(args.bgm_volume)
 
-filtergraph = "{};{}".format(filter_concat, filter_amerge_pan)
+f_concat = "{} concat=n={}:v=0:a=1".format(concat_inputs, len(bgm_files))
+f_atrim = "atrim=duration={}".format(main_length)
+f_afade_in = "afade=type=in:duration={}".format(args.fade_duration)
+f_afade_out = "afade=type=out:start_time={}:duration={}".format(main_length - args.fade_duration, args.fade_duration)
+chain_bgm = "{}, {}, {}, {} [bgm]".format(f_concat, f_atrim, f_afade_in, f_afade_out)
+
+f_amerge = "[bgm][0:0] amerge=inputs=2"
+f_pan = "pan=stereo|FL<{0}*FL+FC|FR<{0}*FR+FC".format(args.bgm_volume)
+chain_merge = "{}, {} [merged]".format(f_amerge, f_pan)
+
+filtergraph = "{}; {}".format(chain_bgm, chain_merge)
 ### }}}
 
 out_quality = ["-q:a", "3"]
-concat_cmd = ["ffmpeg"]
-concat_cmd.extend(["-i", args.main_file])
-concat_cmd.extend([part for f in bgm_files for part in ("-i", f)])
-concat_cmd.extend(["-filter_complex", filtergraph, "-map", "[merged]"])
-concat_cmd.extend(out_quality)
-concat_cmd.append(args.out_with_bgm)
+convert_cmd = ["ffmpeg"]
+convert_cmd.extend(["-i", args.main_file])
+convert_cmd.extend([part for f in bgm_files for part in ("-i", f)])
+convert_cmd.extend(["-filter_complex", filtergraph, "-map", "[merged]"])
+convert_cmd.extend(out_quality)
+convert_cmd.append(args.outfile)
 ## }}}
 
-run_command(concat_cmd)
+run_command(convert_cmd)
